@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPS Tracking</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+body { margin:0; font-family:Arial,sans-serif; }
+header { padding:12px; background:#222; color:white; }
+button { padding:10px 16px; margin:6px 4px 6px 0; }
+#status { font-size:13px; }
+#map { height:calc(100vh - 105px); }
+</style>
+</head>
+<body>
+<header>
+  <strong>GPS Tracking</strong><br>
+<button id="toggleGPS" onclick="toggleGPS()">Start GPS</button>
+  <div id="status">Ready</div>
+</header>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([14.5995,120.9842],13);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19, attribution:'&copy; OpenStreetMap'
+}).addTo(map);
+
+let deviceId = localStorage.getItem('gpsDeviceId');
+if (!deviceId) {
+  deviceId = 'Phone-' + Math.random().toString(36).slice(2,8);
+  localStorage.setItem('gpsDeviceId',deviceId);
+}
+
+const markers = {};
+let watchId = null;
+function toggleGPS() {
+    if (watchId !== null) {
+        stopGPS();
+    } else {
+        startGPS();
+    }
+}
+let mapInitialized = false;
+async function refreshLocations() {
+  try {
+    const res = await fetch('/locations');
+    const locations = await res.json();
+
+    for (const id of Object.keys(markers)) {
+      if (!locations[id]) {
+        map.removeLayer(markers[id]);
+        delete markers[id];
+      }
+    }
+
+    for (const [id,loc] of Object.entries(locations)) {
+      if (!Number.isFinite(loc.lat) || !Number.isFinite(loc.lon)) continue;
+
+      if (!markers[id]) {
+        markers[id] = L.marker([loc.lat,loc.lon])
+          .addTo(map).bindPopup(id);
+      } else {
+        markers[id].setLatLng([loc.lat,loc.lon]);
+      }
+    }
+  } catch(e) {
+    document.getElementById('status').textContent =
+      'Connection error: ' + e.message;
+  }
+}
+
+function startGPS() {
+  if (watchId !== null) return;
+localStorage.setItem('gpsTracking', 'on');
+  if (!navigator.geolocation) {
+    document.getElementById('status').textContent = 'GPS not supported';
+    return;
+  }
+
+  document.getElementById('status').textContent = 'Requesting GPS...';
+document.getElementById('toggleGPS').textContent = 'Stop GPS';
+  watchId = navigator.geolocation.watchPosition(async p => {
+    const loc = {
+      id:deviceId,
+      lat:p.coords.latitude,
+      lon:p.coords.longitude
+    };
+
+    try {
+      const res = await fetch('/locations',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(loc)
+      });
+      if (!res.ok) throw new Error('Upload failed');
+
+      document.getElementById('status').textContent =
+        deviceId + ' active';
+
+if (!mapInitialized) {
+    map.setView([loc.lat,loc.lon],16);
+    mapInitialized = true;
+}
+      await refreshLocations();
+    } catch(e) {
+      document.getElementById('status').textContent =
+        'Send error: ' + e.message;
+    }
+  },e => {
+    document.getElementById('status').textContent = 'GPS error: ' + e.message;
+    stopGPS();
+  },{enableHighAccuracy:true,maximumAge:3000,timeout:15000});
+}
+
+async function stopGPS() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+  }
+  watchId = null;
+document.getElementById('toggleGPS').textContent = 'Start GPS';
+localStorage.setItem('gpsTracking', 'off');
+
+  try {
+    await fetch('/locations/' + encodeURIComponent(deviceId), {
+      method:'DELETE'
+    });
+    await refreshLocations();
+    document.getElementById('status').textContent = 'GPS stopped';
+  } catch(e) {
+    document.getElementById('status').textContent =
+      'GPS stopped; could not clear server pin';
+  }
+}
+
+refreshLocations();
+
+if (localStorage.getItem('gpsTracking') === 'on') {
+  startGPS();
+}
+setInterval(refreshLocations,5000);
+</script>
+</body>
+</html>
