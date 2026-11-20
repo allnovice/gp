@@ -69,6 +69,10 @@ header {
     <div id="deviceList"></div>
 
     <div id="gpsControls">
+        <button id="resetView" onclick="resetMapView()" title="Reset map view">
+            ↻
+        </button>
+
         <div id="status"></div>
         <button id="toggleGPS" onclick="toggleGPS()">Start GPS</button>
     </div>
@@ -77,7 +81,27 @@ header {
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-const map = L.map('map').setView([14.5995,120.9842],13);
+const defaultMapPosition = [14.5995, 120.9842];
+const defaultZoom = 13;
+
+const savedMapView = JSON.parse(
+    localStorage.getItem('gpsMapView') || 'null'
+);
+
+const map = L.map('map').setView(
+    savedMapView?.center || defaultMapPosition,
+    savedMapView?.zoom || defaultZoom
+);
+
+map.on('moveend', () => {
+    const center = map.getCenter();
+
+    localStorage.setItem('gpsMapView', JSON.stringify({
+        center: [center.lat, center.lng],
+        zoom: map.getZoom()
+    }));
+});
+
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
   maxZoom:19, attribution:'&copy; OpenStreetMap'
 }).addTo(map);
@@ -115,6 +139,12 @@ function getDevicePinColor(id) {
 function setGpsStatus(active) {
     document.getElementById('status').style.background =
         active ? 'green' : 'red';
+}
+
+function resetMapView() {
+    map.setView(defaultMapPosition, defaultZoom);
+
+    localStorage.removeItem('gpsMapView');
 }
 
 function toggleGPS() {
