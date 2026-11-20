@@ -177,11 +177,28 @@ if (!markers[id]) {
         icon: pinIcon
     })
         .addTo(map)
-        .bindPopup(id);
+        
+.bindPopup(`
+    <strong>${id}</strong>
+    <br>
+    Last seen: ${new Date(loc.updated * 1000).toLocaleString()}
+`);
+
 } else {
     markers[id].setLatLng([loc.lat, loc.lon]);
     markers[id].setIcon(pinIcon);
 }
+
+const isOnline = (Date.now() / 1000 - loc.updated) <= 60;
+
+markers[id].setPopupContent(`
+    <strong>${id}</strong>
+    <br>
+    ${isOnline
+        ? 'Online'
+        : 'Last seen: ' + new Date(loc.updated * 1000).toLocaleString()
+    }
+`);
 
     }
     renderDeviceList(locations);
@@ -200,9 +217,20 @@ function renderDeviceList(locations) {
         container.style.display = 'flex';
         container.style.alignItems = 'center';
 
-        const nameButton = document.createElement('button');
-        nameButton.className = 'device-button';
-        nameButton.textContent = id;
+const lastSeen = Date.now() / 1000 - locations[id].updated;
+const isOnline = lastSeen <= 60;
+
+const statusDot = document.createElement('span');
+statusDot.style.width = '8px';
+statusDot.style.height = '8px';
+statusDot.style.borderRadius = '50%';
+statusDot.style.background = isOnline ? 'green' : 'red';
+statusDot.style.display = 'inline-block';
+statusDot.style.margin = '0 4px 0 8px';
+
+const nameButton = document.createElement('button');
+nameButton.className = 'device-button';
+nameButton.textContent = id;
 
         nameButton.onclick = () => {
             map.setView(markers[id].getLatLng(), 16);
@@ -240,8 +268,9 @@ function renderDeviceList(locations) {
             pinButton.style.color = nextColor;
         };
 
-        container.appendChild(nameButton);
-        container.appendChild(pinButton);
+container.appendChild(statusDot);
+container.appendChild(nameButton);
+
         deviceList.appendChild(container);
     }
 }

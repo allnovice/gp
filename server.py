@@ -8,7 +8,7 @@ app = Flask(__name__)
 locations = {}
 lock = Lock()
 BASE = os.path.dirname(os.path.abspath(__file__))
-EXPIRY = 60
+EXPIRY = 86400  # 24 hours
 
 @app.route('/')
 def home():
@@ -17,16 +17,22 @@ def home():
 @app.route('/locations', methods=['GET'])
 def get_locations():
     now = time.time()
+
     with lock:
         expired = [
             uid for uid, loc in locations.items()
             if now - loc['updated'] > EXPIRY
         ]
+
         for uid in expired:
             del locations[uid]
 
         return jsonify({
-            uid: {'lat': loc['lat'], 'lon': loc['lon']}
+            uid: {
+                'lat': loc['lat'],
+                'lon': loc['lon'],
+                'updated': loc['updated']
+            }
             for uid, loc in locations.items()
         })
 
